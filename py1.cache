@@ -1,0 +1,201 @@
+hbase org.apache.hadoop.hbase.mapreduce.ImportTsv \
+-Dimporttsv.separator=, \
+-Dimporttsv.columns=HBASE_ROW_KEY,data:name,data:age,data:city,data:salary \
+dataset_table \
+/dataset/input/dataset_noheader.csv
+
+----------------------------------
+LOAD CSV FROM HDFS TO HBASE:
+First create HBase table and column family: create 'dataset_table','data'  Example: create 'netflix','details'  Then ImportTsv: hbase org.apache.hadoop.hbase.mapreduce.ImportTsv -Dimporttsv.separator=, -Dimporttsv.columns=HBASE_ROW_KEY,data:name,data:age,data:city,data:salary dataset_table /dataset/input/dataset_noheader.csv  Example: hbase org.apache.hadoop.hbase.mapreduce.ImportTsv -Dimporttsv.separator=, -Dimporttsv.columns=HBASE_ROW_KEY,details:type,details:title,details:director,details:cast,details:country,details:date_added,details:release_year,details:rating,details:duration,details:listed_in,details:description netflix /ex6/input/netflix_cleaned.csv  HBASE_ROW_KEY = first CSV column used as row key; data:name means column family=data, column=name. The number and order of HBASE_ROW_KEY/column-family:column entries must match the dataset columns. Remove the CSV header before ImportTsv so the header does not become a row. :contentReference[oaicite:1]{index=1}
+
+START HBASE:
+start-hbase.sh  → Start HBase services
+jps  → Check for HMaster and HRegionServer
+hbase shell  → Open HBase shell
+exit  → Exit HBase shell
+:contentReference[oaicite:2]{index=2}
+
+CREATE TABLE:
+create 'table_name','column_family'
+Example: create 'student','info'
+Example: create 'dataset_table','data'
+list  → List all HBase tables
+describe 'table_name'  → Display table structure and column families
+Example: describe 'student'
+:contentReference[oaicite:3]{index=3} :contentReference[oaicite:4]{index=4}
+
+PUT / INSERT / UPDATE:
+put 'table','rowkey','family:column','value'
+Example: put 'student','101','info:name','Alice'
+Example: put 'student','101','info:age','21'
+Example: put 'lab_data','user1','details:name','Alice'
+Example: put 'lab_data','user1','details:role','Security Analyst'
+Same put command can update an existing cell by writing a new value.
+:contentReference[oaicite:5]{index=5}
+
+GET:
+get 'table','rowkey'
+Example: get 'student','101'
+Get one specific column:
+get 'table','rowkey',{COLUMN => 'family:column'}
+Example: get 'student','101',{COLUMN => 'info:name'}
+:contentReference[oaicite:6]{index=6}
+
+SCAN:
+scan 'table'  → Display all rows and columns
+Example: scan 'student'
+Display limited number of rows:
+scan 'table',{LIMIT => 5}
+Example: scan 'student',{LIMIT => 5}
+:contentReference[oaicite:7]{index=7}
+
+COUNT:
+count 'table'
+Example: count 'student'
+Used to count rows in a table.
+:contentReference[oaicite:8]{index=8}
+
+DELETE ONE CELL:
+delete 'table','rowkey','family:column'
+Example: delete 'student','101','info:age'
+Example: delete 'lab_data','user1','details:role'
+:contentReference[oaicite:9]{index=9}
+
+DELETE ENTIRE ROW:
+deleteall 'table','rowkey'
+Example: deleteall 'student','101'
+
+DROP TABLE:
+disable 'table'
+drop 'table'
+Example: disable 'student'
+Example: drop 'student'
+
+TRUNCATE TABLE:
+truncate 'table'
+Example: truncate 'student'
+
+FILTER — EQUAL TO:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',=,'binary:value')"}
+Example: scan 'dataset_table',{FILTER => "SingleColumnValueFilter('data','city',=,'binary:Chennai')"}
+Example: scan 'dataset_table',{FILTER => "SingleColumnValueFilter('data','age',=,'binary:21')"}
+:contentReference[oaicite:10]{index=10}
+
+FILTER — GREATER THAN:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',>,'binary:value')"}
+Example: scan 'spotify',{FILTER=>"SingleColumnValueFilter('info','popularity',>,'binary:80')"}
+Example: scan 'spotify',{FILTER=>"SingleColumnValueFilter('info','energy',>,'binary:0.9')"}
+:contentReference[oaicite:11]{index=11}
+
+FILTER — LESS THAN:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',<,'binary:value')"}
+Example: scan 'spotify',{FILTER=>"SingleColumnValueFilter('info','popularity',<,'binary:50')"}
+
+FILTER — GREATER THAN OR EQUAL:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',>=,'binary:value')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','release_year',>=,'binary:2015')"}
+
+FILTER — LESS THAN OR EQUAL:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',<=,'binary:value')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','release_year',<=,'binary:2020')"}
+
+FILTER — SUBSTRING / CONTAINS:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column',=,'substring:value')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','listed_in',=,'substring:Action')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','country',=,'substring:United States')"}
+:contentReference[oaicite:12]{index=12}
+
+MULTIPLE CONDITIONS — AND:
+scan 'table',{FILTER => "SingleColumnValueFilter('family','column1',=,'binary:value1') AND SingleColumnValueFilter('family','column2',>,'binary:value2')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','listed_in',=,'substring:Action') AND SingleColumnValueFilter('details','release_year',>,'binary:2018')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','country',=,'substring:United States') AND SingleColumnValueFilter('details','duration',>,'binary:150')"}
+Example: scan 'netflix',{FILTER => "SingleColumnValueFilter('details','release_year',>=,'binary:2015') AND SingleColumnValueFilter('details','release_year',<=,'binary:2020')"}
+Your uploaded material specifically notes that the shell-friendly form uses AND directly between the SingleColumnValueFilter conditions. :contentReference[oaicite:13]{index=13}
+
+GET PARTICULAR ROW:
+get 'dataset_table','1'
+Example: get 'netflix','s1'
+When the dataset's unique ID is the HBASE_ROW_KEY, get gives fast row access.
+:contentReference[oaicite:14]{index=14}
+
+GET PARTICULAR COLUMN:
+get 'dataset_table','1',{COLUMN => 'data:name'}
+Example: get 'student','101',{COLUMN => 'info:name'}
+:contentReference[oaicite:15]{index=15}
+
+DISPLAY ONLY SELECTED COLUMNS:
+scan 'table',{COLUMNS => ['family:column1','family:column2']}
+Example: scan 'netflix',{COLUMNS => ['details:title','details:director','details:country']}
+
+START/STOP HBASE:
+start-hbase.sh  → start HBase
+stop-hbase.sh  → stop HBase
+
+HBASE TABLE DESIGN:
+Dataset example: id,name,category,value
+Choose: ROW KEY = id
+COLUMN FAMILY = info
+Columns become: info:name, info:category, info:value
+Create: create 'cat1_table','info'
+:contentReference[oaicite:16]{index=16}
+
+CSV TO HBASE MAPPING EXAMPLE:
+CSV: id,name,age,city,salary
+HBase mapping: HBASE_ROW_KEY,data:name,data:age,data:city,data:salary
+Import command: hbase org.apache.hadoop.hbase.mapreduce.ImportTsv -Dimporttsv.separator=, -Dimporttsv.columns=HBASE_ROW_KEY,data:name,data:age,data:city,data:salary dataset_table /dataset/input/dataset_noheader.csv
+:contentReference[oaicite:17]{index=17}
+
+IMPORT TSV WITH A COMMA SEPARATOR:
+hbase org.apache.hadoop.hbase.mapreduce.ImportTsv -Dimporttsv.separator=, -Dimporttsv.columns=HBASE_ROW_KEY,item:name,item:price bulk_table /input/data.csv
+Example table first: create 'bulk_table','item'
+:contentReference[oaicite:18]{index=18}
+
+IMPORT TSV WITH PIPE SEPARATOR:
+hbase org.apache.hadoop.hbase.mapreduce.ImportTsv -Dimporttsv.separator='|' -Dimporttsv.columns=HBASE_ROW_KEY,details:type,details:title,details:director,details:cast,details:country,details:date_added,details:release_year,details:rating,details:duration,details:listed_in,details:description netflix /ex6/input/netflix_cleaned.csv
+The lab cleans the CSV and converts it to pipe-separated format before ImportTsv.
+:contentReference[oaicite:19]{index=19}
+
+NETFLIX EXAMPLE:
+create 'netflix','details'
+exit
+Then from Linux terminal run ImportTsv with show_id as HBASE_ROW_KEY and the remaining fields mapped to details:*.
+Then return to HBase shell:
+scan 'netflix'
+:contentReference[oaicite:20]{index=20}
+
+COMMON NETFLIX QUERIES:
+Display all movies:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','type',=,'binary:Movie')"}
+Get movie by Show ID:
+get 'netflix','s1'
+Display Title, Director, Country:
+scan 'netflix',{COLUMNS => ['details:title','details:director','details:country']}
+Display all TV Shows:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','type',=,'binary:TV Show')"}
+Movies from India:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','country',=,'substring:India')"}
+Movies released after 2020:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','release_year',>,'binary:2020')"}
+Movies duration > 120:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','duration',>,'binary:120')"}
+Titles starting with The:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','title',=,'substring:The')"}
+Action movies after 2018:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','listed_in',=,'substring:Action') AND SingleColumnValueFilter('details','release_year',>,'binary:2018')"}
+USA movies duration > 150:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','country',=,'substring:United States') AND SingleColumnValueFilter('details','duration',>,'binary:150')"}
+Movies released 2015–2020:
+scan 'netflix',{FILTER => "SingleColumnValueFilter('details','release_year',>=,'binary:2015') AND SingleColumnValueFilter('details','release_year',<=,'binary:2020')"}
+These Netflix operations are directly represented in your Experiment 6 material. :contentReference[oaicite:21]{index=21} :contentReference[oaicite:22]{index=22}
+
+HBASE CRUD QUICK MEMORY:
+CREATE → create 'table','family'
+INSERT/UPDATE → put 'table','row','family:column','value'
+READ ONE ROW → get 'table','row'
+READ ALL → scan 'table'
+COUNT → count 'table'
+DELETE CELL → delete 'table','row','family:column'
+DELETE ROW → deleteall 'table','row'
+DESCRIBE → describe 'table'
+LIST TABLES → list
+DELETE TABLE → disable 'table' then drop 'table'
