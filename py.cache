@@ -1,463 +1,347 @@
-RSA:
-import math
+import java.io.IOException;
 
-p = int(input("Enter p: "))
-q = int(input("Enter q: "))
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 
-n = p * q
-phi = (p - 1) * (q - 1)
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 
-e = 2
-while e < phi:
-    if math.gcd(e, phi) == 1:
-        break
-    e += 1
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
 
-d = pow(e, -1, phi)
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-print("n =", n)
-print("phi =", phi)
-print("Public Key  =", (e, n))
-print("Private Key =", (d, n))
+public class UniversalCount {
 
-m = int(input("Enter message as integer: "))
+    // =========================
+    // MAPPER
+    // =========================
+    public static class CountMapper
+            extends Mapper<Object, Text, Text, IntWritable> {
 
-c = pow(m, e, n)
-print("Encrypted =", c)
+        private final static IntWritable ONE = new IntWritable(1);
+        private Text outputKey = new Text();
 
-decrypted = pow(c, d, n)
-print("Decrypted =", decrypted)
+        private int columnIndex;
+        private String separator;
+        private boolean skipHeader;
 
-p = 61
-q = 53
+        @Override
+        protected void setup(Context context) {
 
-n = p * q
-phi = (p - 1) * (q - 1)
+            Configuration conf = context.getConfiguration();
 
-e = 17
-d = pow(e, -1, phi)
+            columnIndex =
+                    Integer.parseInt(conf.get("column.index"));
 
-text = input("Enter text: ")
+            separator =
+                    conf.get("separator", ",");
 
-encrypted = [pow(ord(ch), e, n) for ch in text]
-print("Encrypted:", encrypted)
+            skipHeader =
+                    conf.getBoolean("skip.header", true);
+        }
 
-decrypted = "".join(chr(pow(x, d, n)) for x in encrypted)
-print("Decrypted:", decrypted)
+        @Override
+        public void map(
+                Object key,
+                Text value,
+                Context context)
+                throws IOException, InterruptedException {
 
+            String line = value.toString().trim();
 
+            // Ignore empty lines
+            if (line.isEmpty())
+                return;
 
-Diffie-Hellman
+            // Skip first/header-type line
+            if (skipHeader && line.toLowerCase().contains("id,"))
+                return;
 
-q = int(input("Enter prime q: "))
-a = int(input("Enter primitive root alpha: "))
+            // Split record
+            String[] fields =
+                    line.split(separator, -1);
 
-xa = int(input("Enter A private key: "))
-xb = int(input("Enter B private key: "))
+            // Check column
+            if (fields.length <= columnIndex)
+                return;
 
-ya = pow(a, xa, q)
-yb = pow(a, xb, q)
+            String selectedValue =
+                    fields[columnIndex].trim();
 
-print("A Public Key =", ya)
-print("B Public Key =", yb)
+            // Ignore empty values
+            if (selectedValue.isEmpty())
+                return;
 
-ka = pow(yb, xa, q)
-kb = pow(ya, xb, q)
+            outputKey.set(selectedValue);
 
-print("A Shared Key =", ka)
-print("B Shared Key =", kb)
+            // key -> 1
+            context.write(outputKey, ONE);
+        }
+    }
 
-if ka == kb:
-    print("Shared secret established successfully")
-else:
-    print("Key exchange failed")
 
-Caesar Cipher
-def caesar(text, key):
-    result = ""
-    for ch in text:
-        if ch.isupper():
-            result += chr((ord(ch) - ord('A') + key) % 26 + ord('A'))
-        elif ch.islower():
-            result += chr((ord(ch) - ord('a') + key) % 26 + ord('a'))
-        else:
-            result += ch
-    return result
+    // =========================
+    // REDUCER
+    // =========================
+    public static class CountReducer
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
 
-choice = input("1. Encrypt\n2. Decrypt\nChoice: ")
-text = input("Enter text: ")
-key = int(input("Enter key: "))
-if choice == "2":
-    key = -key
-print("Result:", caesar(text, key))
+        @Override
+        public void reduce(
+                Text key,
+                Iterable<IntWritable> values,
+                Context context)
+                throws IOException, InterruptedException {
+
+            int sum = 0;
+
+            for (IntWritable value : values) {
+                sum += value.get();
+            }
+
+            context.write(
+                    key,
+                    new IntWritable(sum)
+            );
+        }
+    }
+
+
+    // =========================
+    // DRIVER
+    // =========================
+    public static void main(String[] args)
+            throws Exception {
+
+        /*
+         * args[0] = input path
+         * args[1] = output path
+         * args[2] = column index
+         */
+
+        Configuration conf = new Configuration();
+
+        // Command-line parameter
+        conf.set(
+                "column.index",
+                args[2]
+        );
+
+        conf.set(
+                "separator",
+                ","
+        );
+
+        conf.setBoolean(
+                "skip.header",
+                true
+        );
+
+
+        Job job =
+                Job.getInstance(
+                        conf,
+                        "Universal Count"
+                );
 
-Columnar:
-def columnar_encrypt(text, key):
-    cols = len(key)
+        job.setJarByClass(
+                UniversalCount.class
+        );
 
-    while len(text) % cols != 0:
-        text += 'X'
+        job.setMapperClass(
+                CountMapper.class
+        );
 
-    grid = []
-    for i in range(0, len(text), cols):
-        grid.append(text[i:i+cols])
+        job.setReducerClass(
+                CountReducer.class
+        );
 
-    order = sorted(range(cols), key=lambda i: key[i])
+        job.setOutputKeyClass(
+                Text.class
+        );
 
-    cipher = ""
+        job.setOutputValueClass(
+                IntWritable.class
+        );
 
-    for col in order:
-        for row in grid:
-            cipher += row[col]
 
-    return cipher
+        FileInputFormat.addInputPath(
+                job,
+                new Path(args[0])
+        );
 
-def columnar_decrypt(cipher, key):
-    cols = len(key)
-    rows = len(cipher) // cols
+        FileOutputFormat.setOutputPath(
+                job,
+                new Path(args[1])
+        );
 
-    order = sorted(range(cols), key=lambda i: key[i])
 
-    grid = [[''] * cols for _ in range(rows)]
+        System.exit(
+                job.waitForCompletion(true)
+                        ? 0
+                        : 1
+        );
+    }
+}
+*-*-*-*-*-*-*-
+import java.io.IOException;
 
-    k = 0
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-    for col in order:
-        for row in range(rows):
-            grid[row][col] = cipher[k]
-            k += 1
+public class CountUser {
 
-    text = ""
+    // Mapper
+    public static class CountUserMapper
+            extends Mapper<LongWritable, Text, Text, IntWritable> {
 
-    for row in grid:
-        text += ''.join(row)
+        public void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
 
-    return text.rstrip('X')
+            String[] fields = value.toString().split(",");
 
+            context.write(new Text(fields[3]), new IntWritable(1));
+        }
+    }
 
-text = input("Enter text: ").replace(" ", "")
-key = input("Enter key: ")
+    // Reducer
+    public static class CountUserReducer
+            extends Reducer<Text, IntWritable, Text, IntWritable> {
 
-encrypted = columnar_encrypt(text, key)
-print("Encrypted:", encrypted)
+        public void reduce(Text key, Iterable<IntWritable> values,
+                           Context context)
+                throws IOException, InterruptedException {
 
-decrypted = columnar_decrypt(encrypted, key)
-print("Decrypted:", decrypted)
-double Columnar:
-def columnar_encrypt(text, key):
-    cols = len(key)
+            int sum = 0;
 
-    while len(text) % cols != 0:
-        text += 'X'
+            for (IntWritable value : values) {
+                sum += value.get();
+            }
 
-    grid = []
+            context.write(key, new IntWritable(sum));
+        }
+    }
 
-    for i in range(0, len(text), cols):
-        grid.append(text[i:i+cols])
+    // Driver
+    public static void main(String[] args) throws Exception {
 
-    order = sorted(range(cols), key=lambda i: key[i])
+        Configuration conf = new Configuration();
 
-    result = ""
+        Job job = Job.getInstance(conf, "Count User");
 
-    for col in order:
-        for row in grid:
-            result += row[col]
+        job.setJarByClass(CountUser.class);
 
-    return result
+        job.setMapperClass(CountUserMapper.class);
+        job.setReducerClass(CountUserReducer.class);
 
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
 
-def columnar_decrypt(cipher, key):
-    cols = len(key)
-    rows = len(cipher) // cols
+        FileInputFormat.addInputPath(job, new Path(args[0]));
 
-    order = sorted(range(cols), key=lambda i: key[i])
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-    grid = [[''] * cols for _ in range(rows)]
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
 
-    k = 0
 
-    for col in order:
-        for row in range(rows):
-            grid[row][col] = cipher[k]
-            k += 1
 
-    result = ""
+*-*-*-*-*-*-*-
+String[] fields = value.toString().split(",");
 
-    for row in grid:
-        result += ''.join(row)
+context.write(
+    new Text(fields[0]),
+    new IntWritable(Integer.parseInt(fields[1]))
+);
 
-    return result
 
+*-*-*-*-*-*-*-
 
-text = input("Enter text: ").replace(" ", "")
-key1 = input("Enter key 1: ")
-key2 = input("Enter key 2: ")
+public void reduce(Text key,
+                   Iterable<IntWritable> values,
+                   Context context)
+        throws IOException, InterruptedException {
 
-# Encryption
-step1 = columnar_encrypt(text, key1)
-encrypted = columnar_encrypt(step1, key2)
+    int sum = 0;
 
-print("After first:", step1)
-print("Encrypted:", encrypted)
+    for (IntWritable value : values) {
+        sum += value.get();
+    }
 
-# Decryption
-step1 = columnar_decrypt(encrypted, key2)
-decrypted = columnar_decrypt(step1, key1)
+    context.write(key, new IntWritable(sum));
+}
+*-*-*-*-*-*-*-
+public void reduce(Text key,
+                   Iterable<IntWritable> values,
+                   Context context)
+        throws IOException, InterruptedException {
 
-print("Decrypted:", decrypted.rstrip('X'))
+    int count = 0;
 
-Hill cipher:
-import numpy as np
-key = np.array([
-    [6, 24, 1],
-    [13, 16, 10],
-    [20, 17, 15]
-])
-def mod_inverse(a, m):
-    for x in range(1, m):
-        if (a * x) % m == 1:
-            return x
-    return None
-def inverse_matrix(key):
-    det = int(round(np.linalg.det(key))) % 26
-    det_inv = mod_inverse(det, 26)
+    for (IntWritable value : values) {
+        count++;
+    }
 
-    if det_inv is None:
-        return None
+    context.write(key, new IntWritable(count));
+}
 
-    adj = np.round(det * np.linalg.inv(key)).astype(int) % 26
 
-    return (det_inv * adj) % 26
+*-*-*-*-*-*-*-
+int max = Integer.MIN_VALUE;
 
+for (IntWritable value : values) {
+    if (value.get() > max) {
+        max = value.get();
+    }
+}
 
-def process(text, matrix):
-    result = ""
+context.write(key, new IntWritable(max));
 
-    for i in range(0, len(text), 3):
 
-        block = [
-            ord(text[i]) - 65,
-            ord(text[i + 1]) - 65,
-            ord(text[i + 2]) - 65
-        ]
+*-*-*-*-*-*-*-
+int min = Integer.MAX_VALUE;
 
-        for r in range(3):
-            value = 0
+for (IntWritable value : values) {
+    if (value.get() < min) {
+        min = value.get();
+    }
+}
 
-            for c in range(3):
-                value += matrix[r][c] * block[c]
+context.write(key, new IntWritable(min));
 
-            result += chr((value % 26) + 65)
 
-    return result
+*********
+public void reduce(Text key, Iterable<IntWritable> values,
+                   Context context)
+        throws IOException, InterruptedException {
 
+    int sum = 0;
+    int count = 0;
 
-choice = input("1. Encrypt\n2. Decrypt\nChoice: ")
+    for (IntWritable value : values) {
+        sum += value.get();
+        count++;
+    }
 
-text = input("Enter text: ").upper().replace(" ", "")
+    int average = sum / count;
 
-while len(text) % 3 != 0:
-    text += "X"
+    context.write(key, new IntWritable(average));
+}
 
-if choice == "1":
 
-    cipher = process(text, key)
-    print("Cipher Text:", cipher)
 
-elif choice == "2":
 
-    inv_key = inverse_matrix(key)
 
-    if inv_key is None:
-        print("Key cannot be inverted")
-    else:
-        plain = process(text, inv_key)
-        print("Plain Text:", plain.rstrip("X"))
-
-else:
-    print("Invalid choice")
-
-Playfair cipher:
-key = input("Enter key: ").upper().replace("J", "I")
-text = input("Enter text: ").upper().replace("J", "I").replace(" ", "")
-
-alphabet = "ABCDEFGHIKLMNOPQRSTUVWXYZ"
-
-# Create 5x5 matrix
-matrix = []
-
-for ch in key + alphabet:
-    if ch not in matrix:
-        matrix.append(ch)
-
-table = [matrix[i:i+5] for i in range(0, 25, 5)]
-
-print("Playfair Matrix:")
-for row in table:
-    print(row)
-
-
-def find(ch):
-    for r in range(5):
-        for c in range(5):
-            if table[r][c] == ch:
-                return r, c
-
-
-# Create pairs
-pairs = []
-i = 0
-
-while i < len(text):
-    a = text[i]
-
-    if i + 1 < len(text):
-        b = text[i + 1]
-
-        if a == b:
-            pairs.append(a + "X")
-            i += 1
-        else:
-            pairs.append(a + b)
-            i += 2
-    else:
-        pairs.append(a + "X")
-        i += 1
-
-
-print("Pairs:", pairs)
-
-
-choice = input("1. Encrypt\n2. Decrypt\nChoice: ")
-
-shift = 1 if choice == "1" else -1
-
-result = ""
-
-for pair in pairs:
-
-    a, b = pair
-
-    r1, c1 = find(a)
-    r2, c2 = find(b)
-
-    # Same row
-    if r1 == r2:
-        result += table[r1][(c1 + shift) % 5]
-        result += table[r2][(c2 + shift) % 5]
-
-    # Same column
-    elif c1 == c2:
-        result += table[(r1 + shift) % 5][c1]
-        result += table[(r2 + shift) % 5][c2]
-
-    # Rectangle
-    else:
-        result += table[r1][c2]
-        result += table[r2][c1]
-
-
-if choice == "1":
-    print("Cipher:", result)
-else:
-    print("Plain:", result)
-
-modular arithmetic program
-a = int(input("Enter a: "))
-b = int(input("Enter b: "))
-m = int(input("Enter modulus: "))
-
-print("Addition  =", (a + b) % m)
-print("Subtraction =", (a - b) % m)
-print("Multiplication =", (a * b) % m)
-print("Power =", pow(a, b, m))
-
-a = int(input("Enter a: "))
-m = int(input("Enter modulus: "))
-
-print("Inverse =", pow(a, -1, m))
-Character → ASCII
-ch = input("Enter character: ")
-ascii_value = ord(ch)
-print("Character:", ch)
-print("ASCII:", ascii_value)
-
-ASCII → Character
-n = int(input("Enter ASCII value: "))
-print(chr(n))
-Character → Binary
-ch = input("Enter character: ")
-ascii_value = ord(ch)
-binary = format(ascii_value, '08b')
-print("ASCII:", ascii_value)
-print("Binary:", binary)
-
-Universal function
-def char_to_binary(ch):
-    return format(ord(ch), '08b')
-print(char_to_binary('A'))
-
-Binary → Decimal
-binary = input("Enter binary: ") 
-decimal = int(binary, 2) 
-print("Decimal:", decimal)
-
-Binary → Character
-binary = input("Enter binary: ")
-decimal = int(binary, 2)
-character = chr(decimal)
-print(character)
-
-
-XOR of Two Parts
-a = input("Enter first binary: ")
-b = input("Enter second binary: ")
-result = ""
-for x, y in zip(a, b):
-    result += str(int(x) ^ int(y))
-print("XOR:", result)
-
-def xor_bits(a, b):
-    return ''.join(str(int(x) ^ int(y)) for x, y in zip(a, b))
-print(xor_bits("1010", "1100"))
-
-XOR with Key
-data = input("Enter data: ")
-key = input("Enter key: ")
-result = ""
-for x, y in zip(data, key):
-    result += str(int(x) ^ int(y))
-print("Result:", result)
-def xor_bits(a, b):
-    return ''.join(str(int(x) ^ int(y)) for x, y in zip(a, b))
-
-data = "1010"
-key = "1100"
-encrypted = xor_bits(data, key)
-decrypted = xor_bits(encrypted, key)
-print("Encrypted:", encrypted)
-print("Decrypted:", decrypted)
-
-FUNCTION:
-
-def to_binary(ch):
-    return format(ord(ch), '08b')
-def xor_bits(a, b):
-    return ''.join(str(int(x) ^ int(y)) for x, y in zip(a, b))
-def swap_halves(bits):
-    mid = len(bits) // 2
-    return bits[mid:] + bits[:mid]
-def binary_to_char(bits):
-    return chr(int(bits, 2))
-ch = input("Enter character: ")
-key = input("Enter 8-bit key: ")
-bits = to_binary(ch)
-print("ASCII :", ord(ch))
-print("Binary:", bits)
-xored = xor_bits(bits, key)
-print("XOR   :", xored)
-swapped = swap_halves(xored)
-print("Swap  :", swapped)
-result = binary_to_char(swapped)
-print("Character:", result)
 
