@@ -1,347 +1,116 @@
-import java.io.IOException;
+NIST DSA:
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
+from hashlib import sha256
+from secrets import randbelow
 
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
+p, q, g = 809, 101, 256
 
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
+def H(m):
+    return int.from_bytes(sha256(m.encode()).digest(), "big") % q
 
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+def sign(m, x):
+    h = H(m)
+    while 1:
+        k = randbelow(q-1) + 1
+        r = pow(g, k, p) % q
+        if r:
+            s = pow(k, -1, q) * (h + x*r) % q
+            if s:
+                return r, s
 
-public class UniversalCount {
+def verify(m, r, s, y):
+    h = H(m)
+    w = pow(s, -1, q)
+    u1 = h*w % q
+    u2 = r*w % q
+    v = (pow(g,u1,p) * pow(y,u2,p) % p) % q
+    return v == r
 
-    // =========================
-    // MAPPER
-    // =========================
-    public static class CountMapper
-            extends Mapper<Object, Text, Text, IntWritable> {
+m = input("Enter document: ")
 
-        private final static IntWritable ONE = new IntWritable(1);
-        private Text outputKey = new Text();
+x = randbelow(q-1) + 1
+y = pow(g, x, p)
 
-        private int columnIndex;
-        private String separator;
-        private boolean skipHeader;
+r, s = sign(m, x)
 
-        @Override
-        protected void setup(Context context) {
+print("\nPrivate Key:", x)
+print("Public Key:", y)
+print("Hash:", H(m))
+print("Signature:", r, s)
 
-            Configuration conf = context.getConfiguration();
+print("Verification:", "VALID" if verify(m,r,s,y) else "INVALID")
 
-            columnIndex =
-                    Integer.parseInt(conf.get("column.index"));
+m2 = input("\nModified document: ")
+print("Modified Verification:",
+      "VALID" if verify(m2,r,s,y) else "INVALID")
+—----------------------------------------------------------------------------------------------------
 
-            separator =
-                    conf.get("separator", ",");
+ECDSA:
 
-            skipHeader =
-                    conf.getBoolean("skip.header", true);
-        }
+import hashlib
 
-        @Override
-        public void map(
-                Object key,
-                Text value,
-                Context context)
-                throws IOException, InterruptedException {
+p, a, b = 17, 2, 2
+G, n, d = (5,1), 19, 7
 
-            String line = value.toString().trim();
+def add(P,Q):
+    if P is None: return Q
+    if Q is None: return P
 
-            // Ignore empty lines
-            if (line.isEmpty())
-                return;
+    x1,y1 = P
+    x2,y2 = Q
 
-            // Skip first/header-type line
-            if (skipHeader && line.toLowerCase().contains("id,"))
-                return;
+    if x1 == x2 and (y1+y2) % p == 0:
+        return None
 
-            // Split record
-            String[] fields =
-                    line.split(separator, -1);
+    if P == Q:
+        m = (3*x1*x1+a) * pow(2*y1,-1,p) % p
+    else:
+        m = (y2-y1) * pow(x2-x1,-1,p) % p
 
-            // Check column
-            if (fields.length <= columnIndex)
-                return;
+    x3 = (m*m-x1-x2) % p
+    y3 = (m*(x1-x3)-y1) % p
 
-            String selectedValue =
-                    fields[columnIndex].trim();
+    return x3,y3
 
-            // Ignore empty values
-            if (selectedValue.isEmpty())
-                return;
+def mul(k,P):
+    R = None
+    for _ in range(k):
+        R = add(R,P)
+    return R
 
-            outputKey.set(selectedValue);
+def H(m):
+    h = hashlib.sha256(m.encode()).hexdigest()
+    return int(h,16) % n
 
-            // key -> 1
-            context.write(outputKey, ONE);
-        }
-    }
+Q = mul(d,G)
 
+m = input("Enter message: ")
 
-    // =========================
-    // REDUCER
-    // =========================
-    public static class CountReducer
-            extends Reducer<Text, IntWritable, Text, IntWritable> {
+z = H(m)
+k = 5
+R = mul(k,G)
+r = R[0] % n
+s = pow(k,-1,n) * (z+r*d) % n
 
-        @Override
-        public void reduce(
-                Text key,
-                Iterable<IntWritable> values,
-                Context context)
-                throws IOException, InterruptedException {
-
-            int sum = 0;
-
-            for (IntWritable value : values) {
-                sum += value.get();
-            }
-
-            context.write(
-                    key,
-                    new IntWritable(sum)
-            );
-        }
-    }
-
-
-    // =========================
-    // DRIVER
-    // =========================
-    public static void main(String[] args)
-            throws Exception {
-
-        /*
-         * args[0] = input path
-         * args[1] = output path
-         * args[2] = column index
-         */
-
-        Configuration conf = new Configuration();
-
-        // Command-line parameter
-        conf.set(
-                "column.index",
-                args[2]
-        );
-
-        conf.set(
-                "separator",
-                ","
-        );
-
-        conf.setBoolean(
-                "skip.header",
-                true
-        );
-
-
-        Job job =
-                Job.getInstance(
-                        conf,
-                        "Universal Count"
-                );
+print("\nPrivate Key:", d)
+print("Public Key:", Q)
+print("SHA-256:", hashlib.sha256(m.encode()).hexdigest())
+print("Hash z:", z)
+print("k:", k)
+print("R:", R)
+print("Signature:", r,s)
 
-        job.setJarByClass(
-                UniversalCount.class
-        );
+def verify(m,r,s):
+    z = H(m)
+    si = pow(s,-1,n)
+    u1 = z*si % n
+    u2 = r*si % n
+    X = add(mul(u1,G),mul(u2,Q))
 
-        job.setMapperClass(
-                CountMapper.class
-        );
+    return X is not None and X[0] % n == r
 
-        job.setReducerClass(
-                CountReducer.class
-        );
+print("Verification:", "VALID" if verify(m,r,s) else "INVALID")
 
-        job.setOutputKeyClass(
-                Text.class
-        );
-
-        job.setOutputValueClass(
-                IntWritable.class
-        );
-
-
-        FileInputFormat.addInputPath(
-                job,
-                new Path(args[0])
-        );
-
-        FileOutputFormat.setOutputPath(
-                job,
-                new Path(args[1])
-        );
-
-
-        System.exit(
-                job.waitForCompletion(true)
-                        ? 0
-                        : 1
-        );
-    }
-}
-*-*-*-*-*-*-*-
-import java.io.IOException;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-
-public class CountUser {
-
-    // Mapper
-    public static class CountUserMapper
-            extends Mapper<LongWritable, Text, Text, IntWritable> {
-
-        public void map(LongWritable key, Text value, Context context)
-                throws IOException, InterruptedException {
-
-            String[] fields = value.toString().split(",");
-
-            context.write(new Text(fields[3]), new IntWritable(1));
-        }
-    }
-
-    // Reducer
-    public static class CountUserReducer
-            extends Reducer<Text, IntWritable, Text, IntWritable> {
-
-        public void reduce(Text key, Iterable<IntWritable> values,
-                           Context context)
-                throws IOException, InterruptedException {
-
-            int sum = 0;
-
-            for (IntWritable value : values) {
-                sum += value.get();
-            }
-
-            context.write(key, new IntWritable(sum));
-        }
-    }
-
-    // Driver
-    public static void main(String[] args) throws Exception {
-
-        Configuration conf = new Configuration();
-
-        Job job = Job.getInstance(conf, "Count User");
-
-        job.setJarByClass(CountUser.class);
-
-        job.setMapperClass(CountUserMapper.class);
-        job.setReducerClass(CountUserReducer.class);
-
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
-
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
-    }
-}
-
-
-
-*-*-*-*-*-*-*-
-String[] fields = value.toString().split(",");
-
-context.write(
-    new Text(fields[0]),
-    new IntWritable(Integer.parseInt(fields[1]))
-);
-
-
-*-*-*-*-*-*-*-
-
-public void reduce(Text key,
-                   Iterable<IntWritable> values,
-                   Context context)
-        throws IOException, InterruptedException {
-
-    int sum = 0;
-
-    for (IntWritable value : values) {
-        sum += value.get();
-    }
-
-    context.write(key, new IntWritable(sum));
-}
-*-*-*-*-*-*-*-
-public void reduce(Text key,
-                   Iterable<IntWritable> values,
-                   Context context)
-        throws IOException, InterruptedException {
-
-    int count = 0;
-
-    for (IntWritable value : values) {
-        count++;
-    }
-
-    context.write(key, new IntWritable(count));
-}
-
-
-*-*-*-*-*-*-*-
-int max = Integer.MIN_VALUE;
-
-for (IntWritable value : values) {
-    if (value.get() > max) {
-        max = value.get();
-    }
-}
-
-context.write(key, new IntWritable(max));
-
-
-*-*-*-*-*-*-*-
-int min = Integer.MAX_VALUE;
-
-for (IntWritable value : values) {
-    if (value.get() < min) {
-        min = value.get();
-    }
-}
-
-context.write(key, new IntWritable(min));
-
-
-*********
-public void reduce(Text key, Iterable<IntWritable> values,
-                   Context context)
-        throws IOException, InterruptedException {
-
-    int sum = 0;
-    int count = 0;
-
-    for (IntWritable value : values) {
-        sum += value.get();
-        count++;
-    }
-
-    int average = sum / count;
-
-    context.write(key, new IntWritable(average));
-}
-
-
-
-
-
-
+m2 = input("\nEnter message again: ")
+print("Modified Verification:",
+      "VALID" if verify(m2,r,s) else "INVALID")
