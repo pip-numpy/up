@@ -1,116 +1,200 @@
-NIST DSA:
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-from hashlib import sha256
-from secrets import randbelow
+resumes = [
+    {
+        "id": 101,
+        "name": "Arun Kumar",
+        "skills": "Python, Machine Learning, SQL",
+        "experience": 3,
+        "profile": "Python developer experienced in machine learning, data analysis and SQL database management."
+    },
+    {
+        "id": 102,
+        "name": "Priya Sharma",
+        "skills": "Java, Spring Boot, MySQL",
+        "experience": 4,
+        "profile": "Software engineer skilled in Java development, Spring Boot, backend systems and database design."
+    },
+    {
+        "id": 103,
+        "name": "Karthik Raj",
+        "skills": "Python, NLP, Deep Learning",
+        "experience": 2,
+        "profile": "AI engineer working on natural language processing, deep learning and intelligent text retrieval systems."
+    }
+]
 
-p, q, g = 809, 101, 256
+documents = [resume["profile"] for resume in resumes]
 
-def H(m):
-    return int.from_bytes(sha256(m.encode()).digest(), "big") % q
+vectorizer = TfidfVectorizer(stop_words="english")
 
-def sign(m, x):
-    h = H(m)
-    while 1:
-        k = randbelow(q-1) + 1
-        r = pow(g, k, p) % q
-        if r:
-            s = pow(k, -1, q) * (h + x*r) % q
-            if s:
-                return r, s
+tfidf_matrix = vectorizer.fit_transform(documents)
 
-def verify(m, r, s, y):
-    h = H(m)
-    w = pow(s, -1, q)
-    u1 = h*w % q
-    u2 = r*w % q
-    v = (pow(g,u1,p) * pow(y,u2,p) % p) % q
-    return v == r
+query = input("Enter recruitment query: ")
 
-m = input("Enter document: ")
+query_vector = vectorizer.transform([query])
 
-x = randbelow(q-1) + 1
-y = pow(g, x, p)
+similarity_scores = cosine_similarity(query_vector, tfidf_matrix)[0]
 
-r, s = sign(m, x)
+ranked_indices = similarity_scores.argsort()[::-1]
 
-print("\nPrivate Key:", x)
-print("Public Key:", y)
-print("Hash:", H(m))
-print("Signature:", r, s)
+print("\nTop Matching Candidates:")
 
-print("Verification:", "VALID" if verify(m,r,s,y) else "INVALID")
+for index in ranked_indices[:5]:
+    print("Name:", resumes[index]["name"])
+    print("Skills:", resumes[index]["skills"])
+    print("Experience:", resumes[index]["experience"], "years")
+    print("Similarity Score:", round(similarity_scores[index], 4))
+    print("-" * 40)
 
-m2 = input("\nModified document: ")
-print("Modified Verification:",
-      "VALID" if verify(m2,r,s,y) else "INVALID")
-—----------------------------------------------------------------------------------------------------
 
-ECDSA:
+"""
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-import hashlib
+dataset=[
+    {"id":"S101","name":"Harisree","Skills":"python,java,sql","years":"5"},
+    {"id":"S102","name":"Aishu","Skills":"c++,java,machine learning","years":"2"},
+    {"id":"S103","name":"Abi","Skills":"python,raect,deep learning","years":"1"},
+    {"id":"S104","name":"Mithu","Skills":"python,c++,NLP","years":"3"},
+    {"id":"S105","name":"Sachin","Skills":"c++,java,sql","years":"1"}
+]
 
-p, a, b = 17, 2, 2
-G, n, d = (5,1), 19, 7
+doc=[items['Skills'] + " " + items['years'] for items in dataset]
+vectorizer=TfidfVectorizer(stop_words='english')
+tf_idf=vectorizer.fit_transform(doc)
 
-def add(P,Q):
-    if P is None: return Q
-    if Q is None: return P
+his=[]
+def search():
+      user=input("enter user query : ")
+      his.append(user)
+      user_vector=vectorizer.transform([user])
+      sim=cosine_similarity(user_vector,tf_idf)[0]
 
-    x1,y1 = P
-    x2,y2 = Q
+      res=[]
+      for i,score in enumerate(sim):
+            res.append((dataset[i],score))
 
-    if x1 == x2 and (y1+y2) % p == 0:
-        return None
+      res.sort(key=lambda x:x[1],reverse=True)
 
-    if P == Q:
-        m = (3*x1*x1+a) * pow(2*y1,-1,p) % p
+      print("\n Top 2 relevant student")
+      for rank,(stu,score) in enumerate(res[:2],1):
+            if score <= 0.0:
+                  print("\nno student found")
+                  break
+            print(f"\n{rank} . ({stu['id']} - {stu['name']})")
+            print(f"skills : {stu['Skills']}")
+            print(f"experience : {stu['years']}")
+            print(f"similarity score : {score : .2f}")
+    
+def view_history():
+     print("\nHISTORY")
+     for i ,content in enumerate(his,1):
+          print(f"{i} . {content}")
+
+def view_student():
+     print("\nFilter by student sid")
+     sid=input("enter student id : ").upper()
+     found=False
+     for d in dataset:
+          if d["id"] == sid:
+               found=True
+               print(f"\n {d['id']} - {d['name']}")
+               print(f"skills : {d['Skills']}")
+               print(f"experience : {d['years']}")
+     if not found:
+          print(f"\nThe student with {sid} not found.")
+
+def filter_year():
+     print("\nFilter by student years of experience")
+     syr=input("enter student year of experinece : ")
+     found=False
+     for d in dataset:
+          if d["years"] == syr:
+               found=True
+               print(f"\n{d['id']} - {d['name']}")
+               print(f"skills : {d['Skills']}")
+               print(f"experience : {d['years']}")
+     if not found:
+          print(f"\nThe student with {syr} not found.")
+
+def filter_skills():
+     print("\nFilter by student skills")
+     sskill=input("enter student skills : ").lower()
+     found=False
+     for d in dataset:
+          skk=d["Skills"].lower()
+          if sskill in skk:
+               found=True
+               print(f"\n {d['id']} - {d['name']}")
+               print(f"skills : {d['Skills']}")
+               print(f"experience : {d['years']}")
+     if not found:
+          print(f"\nThe student with {sskill} not found.")
+     
+
+
+while True:
+    print("\nResume retrival")
+    print("1.semantic search")
+    print("2.filter by skills")
+    print("3.filter by years of experience")
+    print("4.display particular student details")
+    print("5.view search history")
+    print("6.exit")
+    choice=input("enter choice : ")
+
+    if choice == "1":
+        search()
+    elif choice == "2":
+        filter_skills()
+    elif choice == "3":
+        filter_year()
+    elif choice == "4":
+        view_student()
+    elif choice == "5":
+        view_history()
     else:
-        m = (y2-y1) * pow(x2-x1,-1,p) % p
+          print("thankyou!!")
+          exit()
+"""
 
-    x3 = (m*m-x1-x2) % p
-    y3 = (m*(x1-x3)-y1) % p
+"""
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-    return x3,y3
+dataset=[
+    {"q":"What are the visiting hours of Ooty Botanical Garden?","a":"Open daily from 7:00 AM to 6:30 PM."},
+    {"q":"How can I reach Ooty from Coimbatore?","a":"Regular buses and trains are available."},
+    {"q":"Which is the best season to visit Kodaikanal?","a":"October to March is the ideal season."},
+    {"q":"Where can I book hill station hotels?","a":"Hotels can be booked through the Tourism Portal."},
+    {"q":"What is the entry fee for the Tea Museum?","a":"Adults: ₹30, Children: ₹15."}  
+]
 
-def mul(k,P):
-    R = None
-    for _ in range(k):
-        R = add(R,P)
-    return R
+qns=[items["q"] for items in dataset]
+vectorizer=TfidfVectorizer(stop_words='english')
+tf_idf=vectorizer.fit_transform(qns)
 
-def H(m):
-    h = hashlib.sha256(m.encode()).hexdigest()
-    return int(h,16) % n
+def chat_response(user,th=0.3):
+    user_vector=vectorizer.transform([user])
+    sim=cosine_similarity(user_vector,tf_idf).flatten()
+    best_match_idx=np.argmax(sim)
+    best_score=sim[best_match_idx]
 
-Q = mul(d,G)
+    if best_score < 0.3:
+        print("score : ",best_score)
+        print("sorry! no match found")
+    else:
+        print("\nscore : ",best_score)
+        print("similar questions : ",qns[best_match_idx])
+        print("answer : ",dataset[best_match_idx]["a"])
 
-m = input("Enter message: ")
 
-z = H(m)
-k = 5
-R = mul(k,G)
-r = R[0] % n
-s = pow(k,-1,n) * (z+r*d) % n
-
-print("\nPrivate Key:", d)
-print("Public Key:", Q)
-print("SHA-256:", hashlib.sha256(m.encode()).hexdigest())
-print("Hash z:", z)
-print("k:", k)
-print("R:", R)
-print("Signature:", r,s)
-
-def verify(m,r,s):
-    z = H(m)
-    si = pow(s,-1,n)
-    u1 = z*si % n
-    u2 = r*si % n
-    X = add(mul(u1,G),mul(u2,Q))
-
-    return X is not None and X[0] % n == r
-
-print("Verification:", "VALID" if verify(m,r,s) else "INVALID")
-
-m2 = input("\nEnter message again: ")
-print("Modified Verification:",
-      "VALID" if verify(m2,r,s) else "INVALID")
+while True:
+    user=input("\nenter query : ")
+    if user.lower() == "exit":
+        break
+    chat_response(user)
+"""
