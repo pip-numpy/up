@@ -1,51 +1,180 @@
-marks(rahul,[90,90,80,90]).
-marks(gokul,[10,20,30,40]).
+UDF 1 – Convert a string to UPPERCASE
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class ToUpper extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return null;
+        return input.get(0).toString().toUpperCase();
+    }
+}
+Call: B = FOREACH emp GENERATE ToUpper(name) AS name_upper;
+Lowercase is identical with .toLowerCase().
 
-sum_marks([],0).
-sum_marks([H|T],Sum):-
-	sum_marks(T,Rest),
-	Sum is H+Rest.
+UDF 2 – Classify a NUMBER into a category (income / amount / marks)
+The single most common exam UDF.
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class IncomeClassification extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return "Unknown";
+        double income = Double.parseDouble(input.get(0).toString());
+        if (income >= 60000)      return "High Income";
+        else if (income >= 40000) return "Medium Income";
+        else                      return "Low Income";
+    }
+}
+Call: B = FOREACH emp GENERATE EmployeeNumber, IncomeClassification(MonthlyIncome) AS
+category;
 
-count_marks([],0).
-count_marks([H|T],Count):-
-	count_marks(T,Rest),
-	Count is Rest+1.
+UDF 3 – Classify a YEAR into an era (Netflix release_year)
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class ReleaseYearClassification extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return "Unknown";
+        int year = Integer.parseInt(input.get(0).toString());
+        if (year >= 2020)      return "Recent";
+        else if (year >= 2015) return "Modern";
+        else if (year >= 2010) return "Older";
+        else                   return "Classic";
+    }
+}
+Call: B = FOREACH movies GENERATE title, ReleaseYearClassification(release_year) AS era;
 
+UDF 4 – Filter UDF: keep only "good" rows (returns Boolean)
+A Filter UDF extends FilterFunc and returns true/false. Used directly inside FILTER.
+import java.io.IOException;
+import org.apache.pig.FilterFunc;
+import org.apache.pig.data.Tuple;
+public class IsHighValue extends FilterFunc {
+    @Override
+    public Boolean exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return false;
+        double amount = Double.parseDouble(input.get(0).toString());
+        return amount >= 10000;        // true = keep the row
+    }
+}
+Call: B = FILTER txn BY IsHighValue(TotalAmount);
 
-max_marks([H],H).
-max_marks([H|T],M):-
-	max_marks(T,Rest),
-	M is max(H,Rest).
+UDF 5 – Compute a NEW NUMBER (tax, discount, annual salary)
+Returns a Double instead of a String.
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class AnnualSalary extends EvalFunc<Double> {
+    @Override
+    public Double exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return null;
+        double monthly = Double.parseDouble(input.get(0).toString());
+        return monthly * 12;
+    }
+}
+Call: B = FOREACH emp GENERATE EmployeeNumber, AnnualSalary(MonthlyIncome) AS annual;
 
+UDF 6 – TWO arguments: total price = quantity x unit price
+Shows how to read more than one field.
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class TotalPrice extends EvalFunc<Double> {
+    @Override
+    public Double exec(Tuple input) throws IOException {
+        if (input == null || input.size() < 2 || input.get(0) == null || input.get(1) == null)
+            return null;
+        int qty      = Integer.parseInt(input.get(0).toString());
+        double price = Double.parseDouble(input.get(1).toString());
+        return qty * price;
+    }
+}
+Call: B = FOREACH orders GENERATE order_id, TotalPrice(quantity, unit_price) AS total;
 
-min_marks([H],H).
-min_marks([H|T],Minn):-
-	min_marks(T,Rest),
-	Minn is min(H,Rest).
+UDF 7 – Trim / clean a string (remove extra spaces)
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class Trim extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return null;
+        return input.get(0).toString().trim();
+    }
+}
+Call: B = FOREACH emp GENERATE Trim(name) AS name_clean;
 
-avg(Marks,A):-
-	sum_marks(Marks,Sum),
-	count_marks(Marks,Count),
-	A is Sum/Count.
+UDF 8 – Age group from age
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class AgeGroup extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return "Unknown";
+        int age = Integer.parseInt(input.get(0).toString());
+        if (age < 25)      return "Young";
+        else if (age <= 40) return "Middle";
+        else               return "Senior";
+    }
+}
+Call: B = FOREACH emp GENERATE EmployeeNumber, AgeGroup(Age) AS age_group;
 
+UDF 9 – Yes/No or flag to a readable label
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class AttritionLabel extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return "Unknown";
+        String v = input.get(0).toString();
+        if (v.equalsIgnoreCase("Yes")) return "Left the Company";
+        else                           return "Still Working";
+    }
+}
+Call: B = FOREACH emp GENERATE EmployeeNumber, AttritionLabel(Attrition) AS status;
 
-show([H|T]):-
-	format('First element:~w ~n',[H]),
-	format('Remaining element:~w ~n',[T]).
+UDF 10 – String length
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class StrLength extends EvalFunc<Integer> {
+    @Override
+    public Integer exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return null;
+        return input.get(0).toString().length();
+    }
+}
+Call: B = FOREACH movies GENERATE title, StrLength(title) AS title_len;
 
-student_report(Student):-
-	marks(Student,Marks),format('Student name:~w ~n',[Student]),
-	sum_marks(Marks,Sum),
-	count_marks(Marks,Count),
-	avg(Marks,Avg),
-	max_marks(Marks,Max),
-	min_marks(Marks,Min),
-	show(Marks),
-	format('Sum:~w ~n',[Sum]),
-	format('Count:~w ~n',[Count]),
-	format('Max:~w ~n',[Max]),
-	format('Min:~w ~n',[Min]),
-	format('Avg:~w ~n',[Avg]).
-student_report(Student):-
-	\+ marks(Student,_),
-	format('Student "~w" does not exist',[Student]).
+UDF 11 – Round a number to 2 decimals
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class Round2 extends EvalFunc<Double> {
+    @Override
+    public Double exec(Tuple input) throws IOException {
+        if (input == null || input.size() == 0 || input.get(0) == null) return null;
+        double x = Double.parseDouble(input.get(0).toString());
+        return Math.round(x * 100.0) / 100.0;
+}
+    }
+Call: B = FOREACH t GENERATE Round2(avg_value) AS rounded;
+
+UDF 12 – Concatenate two fields (full name, label)
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+public class FullName extends EvalFunc<String> {
+    @Override
+    public String exec(Tuple input) throws IOException {
+        if (input == null || input.size() < 2) return null;
+        String first = input.get(0) == null ? "" : input.get(0).toString();
+        String last  = input.get(1) == null ? "" : input.get(1).toString();
+        return (first + " " + last).trim();
+    }
+}
