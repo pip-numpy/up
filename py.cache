@@ -1,200 +1,174 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+data = LOAD 'supermarket_sales.csv'
+       USING PigStorage(',')
+       AS (
+           Invoice_ID:chararray,
+           Branch:chararray,
+           City:chararray,
+           Customer_type:chararray,
+           Gender:chararray,
+           Product_line:chararray,
+           Unit_price:double,
+           Quantity:int,
+           Tax:double,
+           Total:double,
+           Sale_date:chararray,
+           Sale_time:chararray,
+           Payment:chararray,
+           COGS:double,
+           Gross_margin_pct:double,
+           Gross_income:double,
+           Rating:double
+       );
+       
+clean_data = FILTER data BY City != 'City';
+first55 = LIMIT clean_data 55;
+DESCRIBE clean_data;
+DUMP first55;
 
-resumes = [
-    {
-        "id": 101,
-        "name": "Arun Kumar",
-        "skills": "Python, Machine Learning, SQL",
-        "experience": 3,
-        "profile": "Python developer experienced in machine learning, data analysis and SQL database management."
-    },
-    {
-        "id": 102,
-        "name": "Priya Sharma",
-        "skills": "Java, Spring Boot, MySQL",
-        "experience": 4,
-        "profile": "Software engineer skilled in Java development, Spring Boot, backend systems and database design."
-    },
-    {
-        "id": 103,
-        "name": "Karthik Raj",
-        "skills": "Python, NLP, Deep Learning",
-        "experience": 2,
-        "profile": "AI engineer working on natural language processing, deep learning and intelligent text retrieval systems."
+
+trans_fil = FILTER clean_data BY Total > 500;
+DUMP trans_fil;
+
+pro1 = FOREACH clean_data GENERATE Invoice_ID, City, Product_line, Quantity,Total;
+DUMP pro1;
+
+ordered_rec = ORDER clean_data BY Total DESC;
+top10 = LIMIT ordered_rec 10;
+pro2 = FOREACH top10 GENERATE Invoice_ID,Product_line,Total;
+DUMP pro2;
+
+all_productline = FOREACH clean_data GENERATE Product_line;
+rem_all_productline = DISTINCT all_productline;
+DUMP rem_all_productline;
+
+group1 = GROUP clean_data BY Payment;
+DESCRIBE group1;
+trans_list = FOREACH group1 GENERATE group,COUNT(clean_data.Payment) AS trans_count;
+DUMP trans_list;
+
+
+group1 = GROUP clean_data BY Payment;
+avg_total = FOREACH group1 GENERATE group,AVG(clean_data.Total) AS trans_avg;
+DUMP avg_total;
+
+group2 = GROUP clean_data BY Product_line;
+DESCRIBE group2;
+total_sales = FOREACH group2 GENERATE group,SUM(clean_data.Total) AS total;
+DUMP total_sales;
+
+one_group = GROUP clean_data ALL;
+maxi = FOREACH one_group GENERATE MAX(clean_data.Total) AS maximum_total;
+mini = FOREACH one_group GENERATE MIN(clean_data.Total) AS minimum_total;
+
+DUMP maxi;
+DUMP mini;
+
+fil1 = FILTER clean_data BY Quantity >= 5 AND Total > 500;
+out = FOREACH fil1 GENERATE Invoice_ID, Product_line, Quantity,Total;
+DUMP out;
+
+SPLIT clean_data INTO
+	high_value IF Total>=500,
+	low_value IF Total < 500,
+	unknown OTHERWISE;
+
+first5 = LIMIT high_value 5;
+DUMP first5;
+
+first5 = LIMIT low_value 5;
+DUMP first5;
+
+combined = UNION low_value,high_value;
+first5 = LIMIT combined 5;
+DUMP first5;
+
+JOIN high_value BY Invoice_ID, low_value BY Invoice_ID;
+first5 = LIMIT combined 5;
+DUMP first5;
+
+
+branch_info = FOREACH clean_data GENERATE Branch,City;
+DESCRIBE branch_info;
+branch_info = DISTINCT branch_info;
+
+join1 = JOIN clean_data by Branch, branch_info by Branch;
+out = FOREACH join1 GENERATE Invoice_ID, Branch, City, Total;
+first5 = LIMIT out 5;
+DUMP first5;
+
+branch_info = FOREACH clean_data GENERATE Branch, City;
+branch_info = DISTINCT branch_info;
+
+join1 = JOIN clean_data BY Branch,
+             branch_info BY Branch;
+
+out = FOREACH join1 GENERATE
+      clean_data::Invoice_ID,
+      clean_data::Branch,
+      branch_info::City,
+      clean_data::Total;
+
+first5 = LIMIT out 5;
+DUMP first5;
+
+/* javac -cp "$PIG_HOME/pig-0.18.0-core-h3.jar:$(hadoop classpath)" SalesCategory.java
+
+jar cf SalesCategory.jar SalesCategory.class  
+
+*/
+
+REGISTER 'myudf.jar';
+out = FOREACH clean_data GENERATE Branch,Total,SalesCategory(Total) AS sales_category;
+out = LIMIT out 5;
+DUMP out;
+
+REGISTER 'sales.jar';
+DEFINE HighSalesFilter HighSalesFilter();
+data = LOAD 'sales.csv'
+USING PigStorage(',')
+AS (Invoice_ID:chararray, Total:double);
+high_sales = FILTER data BY HighSalesFilter(Total);
+DUMP high_sales;
+
+
+-------------------
+import java.io.IOException;
+import org.apache.pig.EvalFunc;
+import org.apache.pig.data.Tuple;
+
+public class SalesCategory extends EvalFunc<String>{
+
+@Override
+public String exec(Tuple input) throws IOException{
+
+if (input == null || input.size() == 0 || input.get(0) == null) return null;
+double value = Double.parseDouble(input.get(0).toString());
+
+if(value >=500) return "High";
+if(value >=250) return "Medium";
+else return "low";
+}}
+
+
+import java.io.IOException;
+import org.apache.pig.FilterFunc;
+import org.apache.pig.data.Tuple;
+
+public class HighSalesFilter extends FilterFunc {
+
+    @Override
+    public Boolean exec(Tuple input) throws IOException {
+
+        if (input == null || input.size() == 0
+                || input.get(0) == null) {
+            return false;
+        }
+
+        double value =
+            Double.parseDouble(input.get(0).toString());
+
+        return value >= 500;
     }
-]
-
-documents = [resume["profile"] for resume in resumes]
-
-vectorizer = TfidfVectorizer(stop_words="english")
-
-tfidf_matrix = vectorizer.fit_transform(documents)
-
-query = input("Enter recruitment query: ")
-
-query_vector = vectorizer.transform([query])
-
-similarity_scores = cosine_similarity(query_vector, tfidf_matrix)[0]
-
-ranked_indices = similarity_scores.argsort()[::-1]
-
-print("\nTop Matching Candidates:")
-
-for index in ranked_indices[:5]:
-    print("Name:", resumes[index]["name"])
-    print("Skills:", resumes[index]["skills"])
-    print("Experience:", resumes[index]["experience"], "years")
-    print("Similarity Score:", round(similarity_scores[index], 4))
-    print("-" * 40)
+}
 
 
-"""
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-dataset=[
-    {"id":"S101","name":"Harisree","Skills":"python,java,sql","years":"5"},
-    {"id":"S102","name":"Aishu","Skills":"c++,java,machine learning","years":"2"},
-    {"id":"S103","name":"Abi","Skills":"python,raect,deep learning","years":"1"},
-    {"id":"S104","name":"Mithu","Skills":"python,c++,NLP","years":"3"},
-    {"id":"S105","name":"Sachin","Skills":"c++,java,sql","years":"1"}
-]
-
-doc=[items['Skills'] + " " + items['years'] for items in dataset]
-vectorizer=TfidfVectorizer(stop_words='english')
-tf_idf=vectorizer.fit_transform(doc)
-
-his=[]
-def search():
-      user=input("enter user query : ")
-      his.append(user)
-      user_vector=vectorizer.transform([user])
-      sim=cosine_similarity(user_vector,tf_idf)[0]
-
-      res=[]
-      for i,score in enumerate(sim):
-            res.append((dataset[i],score))
-
-      res.sort(key=lambda x:x[1],reverse=True)
-
-      print("\n Top 2 relevant student")
-      for rank,(stu,score) in enumerate(res[:2],1):
-            if score <= 0.0:
-                  print("\nno student found")
-                  break
-            print(f"\n{rank} . ({stu['id']} - {stu['name']})")
-            print(f"skills : {stu['Skills']}")
-            print(f"experience : {stu['years']}")
-            print(f"similarity score : {score : .2f}")
-    
-def view_history():
-     print("\nHISTORY")
-     for i ,content in enumerate(his,1):
-          print(f"{i} . {content}")
-
-def view_student():
-     print("\nFilter by student sid")
-     sid=input("enter student id : ").upper()
-     found=False
-     for d in dataset:
-          if d["id"] == sid:
-               found=True
-               print(f"\n {d['id']} - {d['name']}")
-               print(f"skills : {d['Skills']}")
-               print(f"experience : {d['years']}")
-     if not found:
-          print(f"\nThe student with {sid} not found.")
-
-def filter_year():
-     print("\nFilter by student years of experience")
-     syr=input("enter student year of experinece : ")
-     found=False
-     for d in dataset:
-          if d["years"] == syr:
-               found=True
-               print(f"\n{d['id']} - {d['name']}")
-               print(f"skills : {d['Skills']}")
-               print(f"experience : {d['years']}")
-     if not found:
-          print(f"\nThe student with {syr} not found.")
-
-def filter_skills():
-     print("\nFilter by student skills")
-     sskill=input("enter student skills : ").lower()
-     found=False
-     for d in dataset:
-          skk=d["Skills"].lower()
-          if sskill in skk:
-               found=True
-               print(f"\n {d['id']} - {d['name']}")
-               print(f"skills : {d['Skills']}")
-               print(f"experience : {d['years']}")
-     if not found:
-          print(f"\nThe student with {sskill} not found.")
-     
-
-
-while True:
-    print("\nResume retrival")
-    print("1.semantic search")
-    print("2.filter by skills")
-    print("3.filter by years of experience")
-    print("4.display particular student details")
-    print("5.view search history")
-    print("6.exit")
-    choice=input("enter choice : ")
-
-    if choice == "1":
-        search()
-    elif choice == "2":
-        filter_skills()
-    elif choice == "3":
-        filter_year()
-    elif choice == "4":
-        view_student()
-    elif choice == "5":
-        view_history()
-    else:
-          print("thankyou!!")
-          exit()
-"""
-
-"""
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-dataset=[
-    {"q":"What are the visiting hours of Ooty Botanical Garden?","a":"Open daily from 7:00 AM to 6:30 PM."},
-    {"q":"How can I reach Ooty from Coimbatore?","a":"Regular buses and trains are available."},
-    {"q":"Which is the best season to visit Kodaikanal?","a":"October to March is the ideal season."},
-    {"q":"Where can I book hill station hotels?","a":"Hotels can be booked through the Tourism Portal."},
-    {"q":"What is the entry fee for the Tea Museum?","a":"Adults: ₹30, Children: ₹15."}  
-]
-
-qns=[items["q"] for items in dataset]
-vectorizer=TfidfVectorizer(stop_words='english')
-tf_idf=vectorizer.fit_transform(qns)
-
-def chat_response(user,th=0.3):
-    user_vector=vectorizer.transform([user])
-    sim=cosine_similarity(user_vector,tf_idf).flatten()
-    best_match_idx=np.argmax(sim)
-    best_score=sim[best_match_idx]
-
-    if best_score < 0.3:
-        print("score : ",best_score)
-        print("sorry! no match found")
-    else:
-        print("\nscore : ",best_score)
-        print("similar questions : ",qns[best_match_idx])
-        print("answer : ",dataset[best_match_idx]["a"])
-
-
-while True:
-    user=input("\nenter query : ")
-    if user.lower() == "exit":
-        break
-    chat_response(user)
-"""
